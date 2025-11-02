@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs and backups
+*.log
+*.bak
+*.tmp
+
+# Exports / generated data
+exports/
+team*_sensor_data.*

@@ -1,0 +1,27 @@
+{
+  "name": "smartindustry",
+  "version": "1.0.0",
+  "main": "mqtt_mongo.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node mqtt_mongo.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rerkki/smartindustry.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rerkki/smartindustry/issues"
+  },
+  "homepage": "https://github.com/rerkki/smartindustry#readme",
+  "description": "",
+  "dependencies": {
+    "mongodb": "^6.20.0",
+    "mqtt": "^5.14.1"
+  },
+  "devDependencies": {},
+  "keywords": [],
+  "type": "commonjs"
+}
