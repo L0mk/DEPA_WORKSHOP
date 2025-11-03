@@ -1,139 +1,173 @@
-// This example uses an ESP32 Development Board
-// to connect to shiftr.io.
-//
-//
-// Based on code by Joël Gähwiler
-// https://github.com/256dpi/arduino-mqtt
-
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include <WiFi.h>
-#include <MQTT.h>
+#include <string.h>
 
-//////DHT Sensor initialization
-#include "DHT.h"
-#define DHTPIN 4 
-#define DHTTYPE DHT22
-DHT dht(DHTPIN, DHTTYPE);
-//////
+// Include sensor libraries that you need! A temperature sensor works as an example, remove it if you don’t use it
+#include <DHT.h>
 
-////// Give database information here:
-String myDB = "db_test"; //unique database name
-String myColl = "coll_test"; //unique collection name
-String myID = "id"; //serial number, mac address or other unique identification for your device
-//////
+// WiFi credentials
+const char *ssid = "";
+const char *password = "";
 
-////// Give WiFi credentials here
-const char ssid[] = "XXXXXXXX";
-const char pass[] = "YYYYYYYY";
-//////
+// --- MQTT Broker ---
+const char *mqtt_server = ""; // Address of broker
+const int mqtt_port = 1883;   // Broker port
+const char *mqtt_user = "";
+const char *mqtt_pass = "";
+const char *topic = ""; // You will be given a topic name. This must match the given name!
 
-WiFiClient net;
-MQTTClient client;
+// --- Clients ---
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
 
-unsigned long lastMillis = 0;
+// --- Sensor, pin, etc. definitions ---
+#define DHTPIN 5          // Physical pin on the ESP32, needs to match your setup
+#define DHTTYPE DHT11     // We are using DHT in this course
+DHT dht(DHTPIN, DHTTYPE); // Initiate class
 
-void connect() {
-  Serial.print("checking wifi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(1000);
-  }
+// --- Sensor Functions ---
 
-  Serial.print("\nconnecting...");
-  while (!client.connect("ESP-32-eki", "automaatio", "Z0od2PZF65jbtcXu")) {
-    Serial.print(".");
-    delay(1000);
-  }
-
-  Serial.println("\nconnected!");
-
-  client.subscribe("automaatio");
-}
-
-void messageReceived(String &topic, String &payload) {
-  Serial.println("incoming: " + topic + " - " + payload);
-
-  // Note: Do not use the client in the callback to publish, subscribe or
-  // unsubscribe as it may cause deadlocks when other things arrive while
-  // sending and receiving acknowledgments. Instead, change a global variable,
-  // or push to a queue and handle it in the loop after calling `client.loop()`.
-}
-
-void setup() {
-  Serial.begin(115200);
-  WiFi.begin(ssid, pass);
-
-  // Note: Local domain names (e.g. "Computer.local" on OSX) are not supported
-  // by Arduino. You need to set the IP address directly.
-  client.begin("automaatio.cloud.shiftr.io", net);
-  client.onMessage(messageReceived);
-
-  connect();
-
-  dht.begin();
-}
-
-void loop() {
-  client.loop();
-  delay(10);  // <- fixes some issues with WiFi stability
-
-  if (!client.connected()) {
-    connect();
-  }
-
-  // publish a message roughly every 30 seconds.
-  if (millis() - lastMillis > 30000) {
-    lastMillis = millis();
-
-///// Here, a JSON message to be published is parsed.
-///// first, we include database and ID information:
-  String PubString = "{\"db_name\":\"" + myDB + "\"" + "," +
-                      "\"coll_name\":\"" + myColl + "\"" + "," +
-                      "\"id\":\"" + myID + "\"" + "," +
-
-///// Each sensor will be included into JSON as functions.
-///// The output of the sensor functions must be JSON-compatible strings
-///// You can include as many sensors as you can fit into a message of 250 characters
-                       Sensor1() + "," +
-                       Sensor2() +
-
-///// Finally, the JSON is closed
-                       "}";
-
-///// The string is then published
-    client.publish("automaatio", PubString);
-  }
-}
-
-
-//////Here are the functions to read the sensors
-
-String Sensor1(){
-//////Prototype for reading an analog voltage sensor signal
-  int ADC1 = 35; // GPIO 35 is input for sensor 1;
-
-  int val = analogRead(ADC1);
-
-//////Output is formatted as JSON compatible string
-  String sensor1 = "\"S1\":" + String(val);
-
-  return sensor1.c_str();
-
-}
-
-String Sensor2(){
-/////DHT21 humidity & temperature sensor
+// Example function for DHT, add more sensors if you need. Check void loop() for how to use!
+String ReadSensor1()
+{
   float h = dht.readHumidity();
   float t = dht.readTemperature();
-
-  //Set both values to zero if the sensor is faulty
-  if (isnan(h) || isnan(t)) {
-    h = 0; t = 0;
+  // Set both values to zero if the sensor is faulty
+  if (isnan(h) || isnan(t))
+  {
+    h = 0;
+    t = 0;
   }
+  // Output contains both humidity and temperature values in JSON-compatible format
+  String sensor1 = "H:" + String(h) + "," + "T:" + String(t);
 
-  //Output contains both humidity and temperature values in JSON-compatible format
-  String sensor2 = "\"H\":" + String(h) + "," + "\"T\":" + String(t);
-
-  return sensor2.c_str();
-
+  return sensor1;
 }
 
+// Other example functions, make sure you have the correct data type for the value you get back! int = whole number, float = decimals, etc.
+// Make sure the functions in void loop() match this
+// int ReadSensor2()
+// {
+
+// }
+
+// float ReadSensor3()
+// {
+
+// }
+
+// --- CONNECTION FUNCTIONS ---
+void setup_wifi()
+{
+  WiFi.mode(WIFI_STA);
+  Serial.println();
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  // Wait for connection with feedback
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(1000);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected!");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnect()
+{
+  // Loop until we're reconnected
+  while (!mqttClient.connected())
+  {
+    Serial.print("Attempting MQTT connection...");
+
+    // Attempt to connect
+    if (mqttClient.connect("ESP32Client", mqtt_user, mqtt_pass))
+    {
+      Serial.println("connected!");
+    }
+    else
+    {
+      Serial.print("failed, reason=");
+      Serial.print(mqttClient.state());
+      Serial.println(", trying again in 3 seconds");
+      delay(3000);
+    }
+  }
+}
+
+// --- Publish Data ---
+template <typename T> // Advanced template function that accepts any datatype
+void publishData(const char *sensor_name, T sensor_value)
+{
+  // Create JSON document
+  JsonDocument doc;
+
+  // Add the sensor state to the JSON document
+  doc["sensor_name"] = sensor_name;
+  doc["sensor_value"] = sensor_value;
+
+  // Create a buffer to hold the serialized JSON string
+  char jsonBuffer[128];
+
+  // Convert the JSON document to a string
+  serializeJson(doc, jsonBuffer);
+
+  // Publish the JSON string to the MQTT topic
+  boolean success = mqttClient.publish(topic, jsonBuffer);
+
+  // Print to Serial Monitor for debugging
+  if (success)
+  {
+    Serial.print("Published JSON: ");
+    Serial.println(jsonBuffer);
+  }
+  else
+  {
+    Serial.println("✗ Failed to publish message!");
+    Serial.print("Client state: ");
+    Serial.println(mqttClient.state());
+  }
+}
+
+// --- MAIN PROGRAM ---
+
+void setup()
+{
+  // Start Serial FIRST before anything else
+  Serial.begin(19200); // Check that your terminal monitor matches this rate
+  delay(1000);         // Give Serial time to initialize
+  // Connect to WiFi
+  setup_wifi();
+  // Configure MQTT
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  // Set a larger buffer size for PubSubClient if needed
+  // Default is 256 bytes, increase if you have larger messages (More sensors)
+  mqttClient.setBufferSize(512);
+  Serial.println("Setup complete!");
+}
+void loop()
+{
+  // Ensure MQTT connection is maintained
+  if (!mqttClient.connected())
+  {
+    Serial.println("MQTT disconnected! Reconnecting...");
+    reconnect();
+  }
+  // Process incoming MQTT messages and maintain connection
+  // This MUST be called regularly to keep the connection alive
+  mqttClient.loop();
+  String sensor_value = ReadSensor1();
+  // Publish the sensor data via MQTT, you need to add a new one for each sensor! Remember to change the name of the sensor!
+  publishData("dht_sensor", sensor_value);
+  // Delay to avoid flooding the MQTT broker
+  // DO NOT set this under 0.5 seconds
+  delay(500);
+}
